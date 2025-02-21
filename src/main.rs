@@ -45,7 +45,7 @@ impl<'a> Command<'a> {
                     if COMMANDS.contains(&text) {
                         println!("{} is a shell builtin", text);
                     } else {
-                        if let Some(path) = find_command(text) {
+                        if let Some(path) = Command::find_ex_command(text) {
                             println!("{} is {}", self.args.unwrap(), path.to_str().unwrap());
                         } else {
                             println!("{}: not found", self.args.unwrap())
@@ -54,29 +54,37 @@ impl<'a> Command<'a> {
                 }
             }
             _ => {
-                println!("{}: command not found", self.command.trim_end());
-            }
-        }
-    }
-}
+                if Command::find_ex_command(self.command).is_some() {
+                    let output = process::Command::new(self.command)
+                        .args(self.args)
+                        .output()
+                        .expect("Failed to execute command");
 
-fn find_command(target: &str) -> Option<PathBuf> {
-    if let Ok(path) = env::var("PATH") {
-        let dirs: Vec<&str> = path.split(":").collect();
-        for dir in dirs.iter() {
-            if let Ok(entries) = fs::read_dir(dir) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        if entry.file_name().eq(target) {
-                            return Some(entry.path());
-                        }
-                    }
+                    let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
+                    print!("{}", stdout);
+                } else {
+                    println!("{}: command not found", self.command.trim_end());
                 }
             }
         }
     }
 
-    None
+    fn find_ex_command(target: &str) -> Option<PathBuf> {
+        let path = env::var("PATH").unwrap();
+        let dirs: Vec<&str> = path.split(":").collect();
+
+        for dir in dirs.iter() {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries {
+                    let entry = entry.unwrap();
+                    if entry.file_name().eq(target) {
+                        return Some(entry.path());
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 fn main() {
