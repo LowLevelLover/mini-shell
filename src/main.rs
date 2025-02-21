@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::process;
+use std::{env, fs, path::PathBuf, process};
 
 struct Command<'a> {
     command: &'a str,
@@ -45,7 +45,11 @@ impl<'a> Command<'a> {
                     if COMMANDS.contains(&text) {
                         println!("{} is a shell builtin", text);
                     } else {
-                        println!("{}: not found", text);
+                        if let Some(path) = find_command(text) {
+                            println!("{} is {}", self.args.unwrap(), path.to_str().unwrap());
+                        } else {
+                            println!("{}: not found", self.args.unwrap())
+                        }
                     }
                 }
             }
@@ -54,6 +58,25 @@ impl<'a> Command<'a> {
             }
         }
     }
+}
+
+fn find_command(target: &str) -> Option<PathBuf> {
+    if let Ok(path) = env::var("PATH") {
+        let dirs: Vec<&str> = path.split(":").collect();
+        for dir in dirs.iter() {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        if entry.file_name().eq(target) {
+                            return Some(entry.path());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn main() {
