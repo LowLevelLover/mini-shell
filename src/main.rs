@@ -39,6 +39,16 @@ impl<'a> Command<'a> {
                     println!();
                 }
             }
+            "type" => {
+                static COMMANDS: [&str; 3] = ["exit", "echo", "type"];
+                if let Some(text) = self.args {
+                    if COMMANDS.contains(&text) {
+                        println!("{} is a shell builtin", text);
+                    } else {
+                        println!("{}: not found", text);
+                    }
+                }
+            }
             _ => {
                 println!("{}: command not found", self.command.trim_end());
             }
