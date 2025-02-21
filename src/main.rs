@@ -4,7 +4,7 @@ use std::process;
 
 struct Command<'a> {
     command: &'a str,
-    args: Option<Vec<&'a str>>,
+    args: Option<&'a str>,
 }
 
 impl<'a> Command<'a> {
@@ -12,7 +12,7 @@ impl<'a> Command<'a> {
         if let Some(index) = input.find(' ') {
             Self {
                 command: &input[..index],
-                args: Some(Vec::from_iter(input[index..].split_whitespace())),
+                args: Some(&input[index + 1..]),
             }
         } else {
             Self {
@@ -25,9 +25,12 @@ impl<'a> Command<'a> {
     fn run(&self) {
         match self.command {
             "exit" => {
-                let code = self.args.as_ref().unwrap_or(&vec!["0"])[0]
-                    .parse::<i32>()
-                    .unwrap();
+                let code = if let Some(arg) = self.args {
+                    println!("{arg}");
+                    arg.parse::<i32>().unwrap()
+                } else {
+                    0
+                };
                 process::exit(code);
             }
             _ => {
