@@ -26,12 +26,18 @@ impl<'a> Command<'a> {
         match self.command {
             "exit" => {
                 let code = if let Some(arg) = self.args {
-                    println!("{arg}");
                     arg.parse::<i32>().unwrap()
                 } else {
                     0
                 };
                 process::exit(code);
+            }
+            "echo" => {
+                if let Some(text) = self.args {
+                    println!("{}", text);
+                } else {
+                    println!();
+                }
             }
             _ => {
                 println!("{}: command not found", self.command.trim_end());
