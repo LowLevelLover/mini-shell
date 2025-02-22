@@ -46,7 +46,7 @@ impl<'a> Commands<'a> {
             "type" => Self::Type(args_raw.unwrap_or("type")),
             "pwd" => Self::PWD,
             "cd" => match args_raw {
-                Some(path) => Self::CD(path.to_string()),
+                Some(path) => Self::CD(path.trim_end().to_string()),
                 None => Self::CD(env::var("HOME").unwrap()),
             },
             input => {
@@ -92,21 +92,47 @@ impl<'a> Commands<'a> {
             }
             Self::PWD => println!("{}", state.pwd),
             Self::CD(path) => {
-                let mut path_chars = path.chars();
+                let home = env::var("HOME").unwrap();
+                let path_parts;
 
-                match path_chars.next() {
-                    Some('/') => {
-                        if let Ok(is_valid) = fs::exists(path.as_str()) {
-                            if is_valid {
-                                state.pwd = path;
-                            } else {
-                                println!("cd: {}: No such file or directory", path);
+                match path.chars().next() {
+                    Some('~') => {
+                        path_parts = home.split('/').chain(path.split('/'));
+                    }
+                    Some('/') => path_parts = path.split('/').chain("".split('/')), // The chain is unnecessary but Rust type system is strict and I do not want to use Box<dyn Iterator<Item = &str>>,
+                    Some(_) => path_parts = state.pwd.split('/').chain(path.split('/')),
+                    None => unreachable!(),
+                }
+
+                let mut resolved_path = Vec::<&str>::new();
+
+                for path_part in path_parts {
+                    match path_part {
+                        "." => {} // just skip
+                        ".." => {
+                            if resolved_path.len() > 0 {
+                                resolved_path.pop();
                             }
                         }
+                        "" => {}
+                        _ => resolved_path.push(path_part),
                     }
-                    _ => {
-                        unimplemented!()
+                }
+
+                let path = if resolved_path.len() > 0 {
+                    ["/", &resolved_path.join("/")].concat()
+                } else {
+                    "/".to_string()
+                };
+
+                match fs::exists(&path) {
+                    Ok(true) => {
+                        state.pwd = path;
                     }
+                    Ok(false) => {
+                        println!("cd: {}: No such file or directory", path);
+                    }
+                    Err(err) => eprintln!("{}", err),
                 }
             }
         }
