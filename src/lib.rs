@@ -99,9 +99,8 @@ impl<'a> Commands<'a> {
             Self::PWD => println!("{}", state.pwd),
             Self::CD(path) => {
                 let home = env::var("HOME").unwrap();
-                let mut chars = path.chars();
 
-                let path_parts: Vec<&str> = match chars.next() {
+                let path_parts: Vec<&str> = match path.chars().next() {
                     Some('~') => {
                         if let Some(p) = path.get(2..) {
                             home.split('/').chain(p.split('/')).collect()
@@ -124,11 +123,20 @@ impl<'a> Commands<'a> {
                                 resolved_path.pop();
                             }
                         }
+                        "" => {
+                            if resolved_path.len() == 0 {
+                                resolved_path.push(path_part);
+                            }
+                        }
                         _ => resolved_path.push(path_part),
                     }
                 }
 
-                let path = resolved_path.join("/");
+                let path = if resolved_path.len() > 1 {
+                    resolved_path.join("/")
+                } else {
+                    "/".to_string()
+                };
 
                 match fs::exists(&path) {
                     Ok(true) => {
