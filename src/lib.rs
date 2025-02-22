@@ -9,6 +9,7 @@ pub enum Commands<'a> {
     Echo(&'a str),
     Type(&'a str),
     External { command: &'a str, args: &'a str },
+    Pwd(String),
 }
 
 impl<'a> Commands<'a> {
@@ -33,6 +34,10 @@ impl<'a> Commands<'a> {
             ),
             "echo" => Self::Echo(args_raw.unwrap_or("").trim_start()),
             "type" => Self::Type(args_raw.unwrap_or("type")),
+            "pwd" => match env::current_dir() {
+                Ok(path) => Self::Pwd(path.to_str().unwrap().to_string()),
+                Err(err) => panic!("Error getting current directory: {}", err),
+            },
             input => {
                 if Self::find_ext_command(command).is_some() {
                     Self::External {
@@ -74,6 +79,7 @@ impl<'a> Commands<'a> {
                 let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
                 print!("{}", stdout);
             }
+            Self::Pwd(current_path) => println!("{}", current_path),
         }
     }
 
