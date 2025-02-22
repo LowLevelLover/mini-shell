@@ -1,9 +1,11 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
-use codecrafters_shell::Commands;
+use codecrafters_shell::{Commands, State};
 
 fn main() {
+    let mut state = State::new();
+
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
@@ -15,7 +17,7 @@ fn main() {
 
         if input.chars().count() != 0 {
             let cmd = Commands::parse(&input);
-            cmd.exec();
+            cmd.exec(&mut state);
         }
     }
 }

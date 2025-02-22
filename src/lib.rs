@@ -1,15 +1,31 @@
 use std::{env, fs, process, sync::OnceLock};
 
 static CACHE: OnceLock<Vec<fs::DirEntry>> = OnceLock::new();
-static COMMANDS: [&str; 4] = ["exit", "echo", "type", "pwd"];
+static COMMANDS: [&str; 5] = ["exit", "echo", "type", "pwd", "cd"];
+
+pub struct State {
+    pwd: String,
+}
 
 pub enum Commands<'a> {
     Unknown(&'a str),
     Exit(i32),
     Echo(&'a str),
     Type(&'a str),
-    Pwd(String),
+    PWD,
+    CD(String),
     External { command: &'a str, args: &'a str },
+}
+
+impl State {
+    pub fn new() -> Self {
+        let pwd = match env::current_dir() {
+            Ok(path) => path.to_string_lossy().to_string(),
+            Err(err) => panic!("Error getting current directory: {}", err),
+        };
+
+        Self { pwd }
+    }
 }
 
 impl<'a> Commands<'a> {
@@ -19,30 +35,25 @@ impl<'a> Commands<'a> {
 
         if let Some(index) = input_raw.find(' ') {
             command = &input_raw[..index];
-            args_raw = Some(&input_raw[index..]);
+            args_raw = input_raw.get(index + 1..);
         } else {
             command = &input_raw;
         }
 
         match command {
-            "exit" => Self::Exit(
-                args_raw
-                    .unwrap_or(&"0")
-                    .trim_start()
-                    .parse::<i32>()
-                    .unwrap(),
-            ),
-            "echo" => Self::Echo(args_raw.unwrap_or("").trim_start()),
-            "type" => Self::Type(args_raw.unwrap_or("type").trim_start()),
-            "pwd" => match env::current_dir() {
-                Ok(path) => Self::Pwd(path.to_str().unwrap().to_string()),
-                Err(err) => panic!("Error getting current directory: {}", err),
+            "exit" => Self::Exit(args_raw.unwrap_or(&"0").parse::<i32>().unwrap()),
+            "echo" => Self::Echo(args_raw.unwrap_or("")),
+            "type" => Self::Type(args_raw.unwrap_or("type")),
+            "pwd" => Self::PWD,
+            "cd" => match args_raw {
+                Some(path) => Self::CD(path.to_string()),
+                None => Self::CD(env::var("HOME").unwrap()),
             },
             input => {
                 if Self::find_ext_command(command).is_some() {
                     Self::External {
                         command,
-                        args: args_raw.unwrap_or("").trim(),
+                        args: args_raw.unwrap_or("").trim_end(),
                     }
                 } else {
                     Self::Unknown(input)
@@ -51,7 +62,7 @@ impl<'a> Commands<'a> {
         }
     }
 
-    pub fn exec(self) {
+    pub fn exec(self, state: &mut State) {
         match self {
             Self::Unknown(cmd) => println!("{}: command not found", cmd.trim_end()),
             Self::Exit(code) => process::exit(code),
@@ -79,7 +90,25 @@ impl<'a> Commands<'a> {
                 let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
                 print!("{}", stdout);
             }
-            Self::Pwd(current_path) => println!("{}", current_path),
+            Self::PWD => println!("{}", state.pwd),
+            Self::CD(path) => {
+                let mut path_chars = path.chars();
+
+                match path_chars.next() {
+                    Some('/') => {
+                        if let Ok(is_valid) = fs::exists(path.as_str()) {
+                            if is_valid {
+                                state.pwd = path;
+                            } else {
+                                println!("cd: {}: No such file or directory", path);
+                            }
+                        }
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
+            }
         }
     }
 
