@@ -28,6 +28,12 @@ impl State {
     }
 }
 
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Commands<'a> {
     pub fn parse(input_raw: &'a str) -> Self {
         let command: &str;
@@ -37,11 +43,11 @@ impl<'a> Commands<'a> {
             command = &input_raw[..index];
             args_raw = input_raw.get(index + 1..);
         } else {
-            command = &input_raw;
+            command = input_raw;
         }
 
         match command {
-            "exit" => Self::Exit(args_raw.unwrap_or(&"0").parse::<i32>().unwrap()),
+            "exit" => Self::Exit(args_raw.unwrap_or("0").parse::<i32>().unwrap()),
             "echo" => Self::Echo(args_raw.unwrap_or("")),
             "type" => Self::Type(args_raw.unwrap_or("type")),
             "pwd" => Self::PWD,
@@ -93,21 +99,20 @@ impl<'a> Commands<'a> {
             Self::PWD => println!("{}", state.pwd),
             Self::CD(path) => {
                 let home = env::var("HOME").unwrap();
-                let path_parts: Vec<&str>;
                 let mut chars = path.chars();
 
-                match chars.next() {
+                let path_parts: Vec<&str> = match chars.next() {
                     Some('~') => {
-                        path_parts = if let Some(p) = path.get(2..) {
+                        if let Some(p) = path.get(2..) {
                             home.split('/').chain(p.split('/')).collect()
                         } else {
                             home.split('/').collect()
-                        };
+                        }
                     }
-                    Some('/') => path_parts = path.split('/').collect(),
-                    Some(_) => path_parts = state.pwd.split('/').chain(path.split('/')).collect(),
+                    Some('/') => path.split('/').collect(),
+                    Some(_) => state.pwd.split('/').chain(path.split('/')).collect(),
                     None => unreachable!(),
-                }
+                };
 
                 let mut resolved_path = Vec::<&str>::new();
 
@@ -142,8 +147,7 @@ impl<'a> Commands<'a> {
         let ext_commands = CACHE.get_or_init(get_ext_commands);
         ext_commands
             .iter()
-            .filter(|entry| entry.file_name().eq(target))
-            .next()
+            .find(|entry| entry.file_name().eq(target))
     }
 }
 
