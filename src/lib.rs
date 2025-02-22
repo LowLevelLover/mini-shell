@@ -1,15 +1,15 @@
 use std::{env, fs, process, sync::OnceLock};
 
 static CACHE: OnceLock<Vec<fs::DirEntry>> = OnceLock::new();
-static COMMANDS: [&str; 3] = ["exit", "echo", "type"];
+static COMMANDS: [&str; 4] = ["exit", "echo", "type", "pwd"];
 
 pub enum Commands<'a> {
     Unknown(&'a str),
     Exit(i32),
     Echo(&'a str),
     Type(&'a str),
-    External { command: &'a str, args: &'a str },
     Pwd(String),
+    External { command: &'a str, args: &'a str },
 }
 
 impl<'a> Commands<'a> {
@@ -33,7 +33,7 @@ impl<'a> Commands<'a> {
                     .unwrap(),
             ),
             "echo" => Self::Echo(args_raw.unwrap_or("").trim_start()),
-            "type" => Self::Type(args_raw.unwrap_or("type")),
+            "type" => Self::Type(args_raw.unwrap_or("type").trim_start()),
             "pwd" => match env::current_dir() {
                 Ok(path) => Self::Pwd(path.to_str().unwrap().to_string()),
                 Err(err) => panic!("Error getting current directory: {}", err),
@@ -57,7 +57,7 @@ impl<'a> Commands<'a> {
             Self::Exit(code) => process::exit(code),
             Self::Echo(text) => println!("{}", text),
             Self::Type(cmd) => {
-                if COMMANDS.contains(&cmd) {
+                if COMMANDS.contains(&cmd.trim_start()) {
                     println!("{} is a shell builtin", cmd);
                 } else if let Some(entry) = Self::find_ext_command(cmd) {
                     println!("{} is {}", cmd, entry.path().to_str().unwrap());
