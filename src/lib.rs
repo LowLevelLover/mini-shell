@@ -93,14 +93,19 @@ impl<'a> Commands<'a> {
             Self::PWD => println!("{}", state.pwd),
             Self::CD(path) => {
                 let home = env::var("HOME").unwrap();
-                let path_parts;
+                let path_parts: Vec<&str>;
+                let mut chars = path.chars();
 
-                match path.chars().next() {
+                match chars.next() {
                     Some('~') => {
-                        path_parts = home.split('/').chain(path.split('/'));
+                        path_parts = if let Some(p) = path.get(2..) {
+                            home.split('/').chain(p.split('/')).collect()
+                        } else {
+                            home.split('/').collect()
+                        };
                     }
-                    Some('/') => path_parts = path.split('/').chain("".split('/')), // The chain is unnecessary but Rust type system is strict and I do not want to use Box<dyn Iterator<Item = &str>>,
-                    Some(_) => path_parts = state.pwd.split('/').chain(path.split('/')),
+                    Some('/') => path_parts = path.split('/').collect(),
+                    Some(_) => path_parts = state.pwd.split('/').chain(path.split('/')).collect(),
                     None => unreachable!(),
                 }
 
@@ -110,20 +115,15 @@ impl<'a> Commands<'a> {
                     match path_part {
                         "." => {} // just skip
                         ".." => {
-                            if resolved_path.len() > 0 {
+                            if resolved_path.len() > 1 {
                                 resolved_path.pop();
                             }
                         }
-                        "" => {}
                         _ => resolved_path.push(path_part),
                     }
                 }
 
-                let path = if resolved_path.len() > 0 {
-                    ["/", &resolved_path.join("/")].concat()
-                } else {
-                    "/".to_string()
-                };
+                let path = resolved_path.join("/");
 
                 match fs::exists(&path) {
                     Ok(true) => {
