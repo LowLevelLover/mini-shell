@@ -10,11 +10,22 @@ pub struct State {
 pub enum Commands<'a> {
     Unknown(&'a str),
     Exit(i32),
-    Echo(&'a str),
-    Type(&'a str),
-    PWD,
+    Echo(String),
+    Type(String),
+    PWD(String),
     CD(String),
-    External { command: &'a str, args: &'a str },
+    External {
+        command: &'a str,
+        args: Vec<&'a str>,
+    },
+}
+
+#[derive(PartialEq, Eq)]
+enum ArgType {
+    None,
+    Space,
+    Raw,
+    Quote,
 }
 
 impl State {
@@ -35,69 +46,42 @@ impl Default for State {
 }
 
 impl<'a> Commands<'a> {
-    pub fn parse(input_raw: &'a str) -> Self {
-        let command: &str;
-        let mut args_raw: Option<&str> = None;
-
-        if let Some(index) = input_raw.find(' ') {
-            command = &input_raw[..index];
-            args_raw = input_raw.get(index + 1..);
+    pub fn parse(input_raw: &'a str, state: &State) -> Self {
+        let (command, args_list) = if let Some(index) = input_raw.find(' ') {
+            (
+                &input_raw[..index],
+                Self::parse_args(input_raw.get(index + 1..).unwrap_or("")),
+            )
         } else {
-            command = input_raw;
-        }
+            (input_raw, vec![])
+        };
+
+        let resolved_args = args_list.join("");
 
         match command {
-            "exit" => Self::Exit(args_raw.unwrap_or("0").parse::<i32>().unwrap()),
-            "echo" => Self::Echo(args_raw.unwrap_or("")),
-            "type" => Self::Type(args_raw.unwrap_or("type")),
-            "pwd" => Self::PWD,
-            "cd" => match args_raw {
-                Some(path) => Self::CD(path.trim_end().to_string()),
-                None => Self::CD(env::var("HOME").unwrap()),
-            },
-            input => {
-                if Self::find_ext_command(command).is_some() {
-                    Self::External {
-                        command,
-                        args: args_raw.unwrap_or("").trim_end(),
-                    }
+            "exit" => {
+                if args_list.is_empty() {
+                    Self::Exit(0)
                 } else {
-                    Self::Unknown(input)
+                    Self::Exit(args_list[0].parse::<i32>().unwrap())
                 }
             }
-        }
-    }
-
-    pub fn exec(self, state: &mut State) {
-        match self {
-            Self::Unknown(cmd) => println!("{}: command not found", cmd.trim_end()),
-            Self::Exit(code) => process::exit(code),
-            Self::Echo(text) => println!("{}", text),
-            Self::Type(cmd) => {
-                if COMMANDS.contains(&cmd.trim_start()) {
-                    println!("{} is a shell builtin", cmd);
-                } else if let Some(entry) = Self::find_ext_command(cmd) {
-                    println!("{} is {}", cmd, entry.path().to_str().unwrap());
+            "echo" => Self::Echo(resolved_args),
+            "type" => {
+                if resolved_args.is_empty() {
+                    Self::Type("type".to_string())
                 } else {
-                    println!("{}: not found", cmd);
+                    Self::Type(resolved_args)
                 }
             }
-            Self::External { command, args } => {
-                let args = if args.chars().count() == 0 {
-                    None
+            "pwd" => Self::PWD(String::from(&state.pwd)),
+            "cd" => {
+                let path = if resolved_args.is_empty() {
+                    env::var("HOME").unwrap()
                 } else {
-                    Some(args)
+                    resolved_args.trim_end().to_string()
                 };
-                let output = process::Command::new(command)
-                    .args(args)
-                    .output()
-                    .expect("Failed to execute command");
 
-                let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
-                print!("{}", stdout);
-            }
-            Self::PWD => println!("{}", state.pwd),
-            Self::CD(path) => {
                 let home = env::var("HOME").unwrap();
 
                 let path_parts: Vec<&str> = match path.chars().next() {
@@ -124,7 +108,7 @@ impl<'a> Commands<'a> {
                             }
                         }
                         "" => {
-                            if resolved_path.len() == 0 {
+                            if resolved_path.is_empty() {
                                 resolved_path.push(path_part);
                             }
                         }
@@ -138,16 +122,107 @@ impl<'a> Commands<'a> {
                     "/".to_string()
                 };
 
-                match fs::exists(&path) {
-                    Ok(true) => {
-                        state.pwd = path;
+                Self::CD(path)
+            }
+            input => {
+                if Self::find_ext_command(command).is_some() {
+                    Self::External {
+                        command,
+                        args: args_list,
                     }
-                    Ok(false) => {
-                        println!("cd: {}: No such file or directory", path);
-                    }
-                    Err(err) => eprintln!("{}", err),
+                } else {
+                    Self::Unknown(input)
                 }
             }
+        }
+    }
+
+    fn parse_args(text: &str) -> Vec<&str> {
+        if text.is_empty() {
+            return vec![];
+        }
+
+        let mut args: Vec<&str> = Vec::new();
+        let mut start_index: usize = 0;
+        let mut arg_type = ArgType::None;
+
+        for (i, ch) in text.chars().enumerate() {
+            match ch {
+                '\'' => {
+                    if arg_type == ArgType::Quote {
+                        args.push(&text[start_index..i]);
+                        arg_type = ArgType::None;
+                    } else {
+                        arg_type = ArgType::Quote;
+                        start_index = i + 1;
+                    }
+                }
+                ' ' => {
+                    if arg_type == ArgType::Raw {
+                        args.push(&text[start_index..=i]);
+                        arg_type = ArgType::Space;
+                    } else if arg_type == ArgType::None {
+                        args.push(&text[i..i + 1]);
+                        arg_type = ArgType::Space;
+                    }
+                }
+                _ => {
+                    if arg_type == ArgType::None || arg_type == ArgType::Space {
+                        arg_type = ArgType::Raw;
+                        start_index = i;
+                    }
+                }
+            }
+        }
+
+        if arg_type == ArgType::Raw {
+            args.push(&text[start_index..]);
+        }
+
+        args
+    }
+
+    pub fn exec(self, state: &mut State) {
+        match self {
+            Self::Unknown(cmd) => println!("{}: command not found", cmd.trim_end()),
+            Self::Exit(code) => process::exit(code),
+            Self::Echo(text) => println!("{}", text),
+            Self::Type(cmd) => {
+                if COMMANDS.contains(&cmd.trim_start()) {
+                    println!("{} is a shell builtin", cmd);
+                } else if let Some(entry) = Self::find_ext_command(&cmd) {
+                    println!("{} is {}", cmd, entry.path().to_str().unwrap());
+                } else {
+                    println!("{}: not found", cmd);
+                }
+            }
+            Self::External { command, args } => {
+                let args: Vec<String> = if !args.is_empty() {
+                    args.iter()
+                        .map(|el| el.to_string())
+                        .collect::<Vec<String>>()
+                } else {
+                    vec![]
+                };
+
+                let output = process::Command::new(command)
+                    .args(args)
+                    .output()
+                    .expect("Failed to execute command");
+
+                let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
+                print!("{}", stdout);
+            }
+            Self::PWD(path) => println!("{}", path),
+            Self::CD(path) => match fs::exists(&path) {
+                Ok(true) => {
+                    state.pwd = path;
+                }
+                Ok(false) => {
+                    println!("cd: {}: No such file or directory", path);
+                }
+                Err(err) => eprintln!("{}", err),
+            },
         }
     }
 

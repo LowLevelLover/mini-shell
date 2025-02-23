@@ -16,7 +16,7 @@ fn main() {
         input = input.trim().to_owned();
 
         if input.chars().count() != 0 {
-            let cmd = Commands::parse(&input);
+            let cmd = Commands::parse(&input, &state);
             cmd.exec(&mut state);
         }
     }
