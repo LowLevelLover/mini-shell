@@ -7,14 +7,14 @@ pub struct State {
     pwd: String,
 }
 
-pub enum Commands<'a> {
-    Unknown(&'a str),
+pub enum Commands {
+    Unknown(String),
     Exit(i32),
     Echo(String),
     Type(String),
     PWD(String),
     CD(String),
-    External { command: &'a str, args: Vec<String> },
+    External { command: String, args: Vec<String> },
 }
 
 #[derive(PartialEq, Eq)]
@@ -148,15 +148,25 @@ impl Default for State {
     }
 }
 
-impl<'a> Commands<'a> {
-    pub fn parse(input_raw: &'a str, state: &State) -> Self {
-        let (command, args_list) = if let Some(index) = input_raw.find(' ') {
-            (
-                &input_raw[..index],
-                Self::parse_args(input_raw.get(index + 1..).unwrap_or("")),
-            )
-        } else {
-            (input_raw, vec![])
+impl Commands {
+    pub fn parse(input_raw: &str, state: &State) -> Self {
+        let parsed_args = Self::parse_args(input_raw);
+
+        let (command, args_list) = match input_raw.chars().next() {
+            Some('\'') | Some('"') => (
+                parsed_args[0].as_str().trim_end(),
+                parsed_args.get(1..).unwrap_or(&[]).to_owned(),
+            ),
+            _ => {
+                if let Some(index) = input_raw.find(' ') {
+                    (
+                        &input_raw[..index],
+                        Self::parse_args(input_raw.get(index + 1..).unwrap_or("")),
+                    )
+                } else {
+                    (input_raw, vec![])
+                }
+            }
         };
 
         let resolved_args = args_list.join("");
@@ -228,13 +238,13 @@ impl<'a> Commands<'a> {
                 Self::CD(path)
             }
             input => {
-                if Self::find_ext_command(command).is_some() {
+                if Self::find_ext_command(&command).is_some() {
                     Self::External {
-                        command,
-                        args: args_list,
+                        command: command.to_owned(),
+                        args: args_list.to_owned(),
                     }
                 } else {
-                    Self::Unknown(input)
+                    Self::Unknown(input.to_owned())
                 }
             }
         }
