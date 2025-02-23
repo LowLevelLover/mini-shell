@@ -27,6 +27,7 @@ enum ArgType {
     Raw,
     Quote,
     DoubleQoute,
+    BackSlash,
 }
 
 impl State {
@@ -165,6 +166,9 @@ impl<'a> Commands<'a> {
                         arg_type = ArgType::DoubleQoute;
                         start_index = i + 1;
                     }
+                    '\\' => {
+                        arg_type = ArgType::BackSlash;
+                    }
                     _ => {
                         arg_type = ArgType::Raw;
                         start_index = i;
@@ -198,15 +202,18 @@ impl<'a> Commands<'a> {
                         arg_type = ArgType::DoubleQoute;
                         start_index = i + 1;
                     }
+                    '\\' => {
+                        arg_type = ArgType::BackSlash;
+                        args.push(&text[start_index..i]);
+                    }
                     _ => (),
                 },
-                ArgType::Quote => match ch {
-                    '\'' => {
+                ArgType::Quote => {
+                    if ch == '\'' {
                         arg_type = ArgType::None;
                         args.push(&text[start_index..i]);
                     }
-                    _ => (), // just skip
-                },
+                }
                 ArgType::DoubleQoute => match ch {
                     '"' => {
                         arg_type = ArgType::None;
@@ -223,6 +230,10 @@ impl<'a> Commands<'a> {
                     }
                     _ => (), // just skip
                 },
+                ArgType::BackSlash => {
+                    arg_type = ArgType::None;
+                    args.push(&text[i..=i]);
+                }
             }
         }
 
