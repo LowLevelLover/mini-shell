@@ -26,6 +26,7 @@ enum ArgType {
     Space,
     Raw,
     Quote,
+    DoubleQoute,
 }
 
 impl State {
@@ -145,33 +146,83 @@ impl<'a> Commands<'a> {
         let mut args: Vec<&str> = Vec::new();
         let mut start_index: usize = 0;
         let mut arg_type = ArgType::None;
+        let mut buf: Vec<&str> = vec![];
 
-        for (i, ch) in text.chars().enumerate() {
-            match ch {
-                '\'' => {
-                    if arg_type == ArgType::Quote {
-                        args.push(&text[start_index..i]);
-                        arg_type = ArgType::None;
-                    } else {
+        let mut text_iter = text.chars().enumerate();
+
+        while let Some((i, ch)) = text_iter.next() {
+            match arg_type {
+                ArgType::None => match ch {
+                    ' ' => {
+                        arg_type = ArgType::Space;
+                        args.push(&text[i..=i]);
+                    }
+                    '\'' => {
                         arg_type = ArgType::Quote;
                         start_index = i + 1;
                     }
-                }
-                ' ' => {
-                    if arg_type == ArgType::Raw {
-                        args.push(&text[start_index..=i]);
-                        arg_type = ArgType::Space;
-                    } else if arg_type == ArgType::None {
-                        args.push(&text[i..i + 1]);
-                        arg_type = ArgType::Space;
+                    '"' => {
+                        arg_type = ArgType::DoubleQoute;
+                        start_index = i + 1;
                     }
-                }
-                _ => {
-                    if arg_type == ArgType::None || arg_type == ArgType::Space {
+                    _ => {
                         arg_type = ArgType::Raw;
                         start_index = i;
                     }
-                }
+                },
+                ArgType::Space => match ch {
+                    ' ' => (),
+                    '\'' => {
+                        arg_type = ArgType::Quote;
+                        start_index = i + 1;
+                    }
+                    '"' => {
+                        arg_type = ArgType::DoubleQoute;
+                        start_index = i + 1;
+                    }
+                    _ => {
+                        arg_type = ArgType::Raw;
+                        start_index = i;
+                    }
+                },
+                ArgType::Raw => match ch {
+                    ' ' => {
+                        arg_type = ArgType::Space;
+                        args.push(&text[start_index..=i]);
+                    }
+                    '\'' => {
+                        arg_type = ArgType::Quote;
+                        start_index = i + 1;
+                    }
+                    '"' => {
+                        arg_type = ArgType::DoubleQoute;
+                        start_index = i + 1;
+                    }
+                    _ => (),
+                },
+                ArgType::Quote => match ch {
+                    '\'' => {
+                        arg_type = ArgType::None;
+                        args.push(&text[start_index..i]);
+                    }
+                    _ => (), // just skip
+                },
+                ArgType::DoubleQoute => match ch {
+                    '"' => {
+                        arg_type = ArgType::None;
+                        args.push(&text[start_index..i]);
+                    }
+                    '\\' => {
+                        if let Some((_, c)) = text_iter.next() {
+                            static ESC_CHARS: [char; 3] = ['\\', '$', '"'];
+                            if ESC_CHARS.contains(&c) {
+                                buf.push(&text[start_index..i]);
+                                start_index = i + 1;
+                            }
+                        }
+                    }
+                    _ => (), // just skip
+                },
             }
         }
 
