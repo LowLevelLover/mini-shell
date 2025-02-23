@@ -14,10 +14,7 @@ pub enum Commands<'a> {
     Type(String),
     PWD(String),
     CD(String),
-    External {
-        command: &'a str,
-        args: Vec<&'a str>,
-    },
+    External { command: &'a str, args: Vec<String> },
 }
 
 #[derive(PartialEq, Eq)]
@@ -28,6 +25,110 @@ enum ArgType {
     Quote,
     DoubleQoute,
     BackSlash,
+}
+
+impl ArgType {
+    fn parse_args(text: &str) -> Vec<String> {
+        let mut args = Vec::<String>::new();
+        let mut buf = Vec::<&str>::new();
+        let mut start_index = 0usize;
+        let mut arg_type = Self::None;
+        let mut text_iter = text.chars().enumerate();
+
+        while let Some((i, ch)) = text_iter.next() {
+            match arg_type {
+                Self::None => match ch {
+                    ' ' => {
+                        arg_type = Self::Space;
+                        args.push(text[i..=i].to_string());
+                    }
+                    '\'' => {
+                        arg_type = Self::Quote;
+                        start_index = i + 1;
+                    }
+                    '"' => {
+                        arg_type = Self::DoubleQoute;
+                        start_index = i + 1;
+                    }
+                    '\\' => {
+                        arg_type = Self::BackSlash;
+                    }
+                    _ => {
+                        arg_type = Self::Raw;
+                        start_index = i;
+                    }
+                },
+                Self::Space => match ch {
+                    ' ' => (),
+                    '\'' => {
+                        arg_type = Self::Quote;
+                        start_index = i + 1;
+                    }
+                    '"' => {
+                        arg_type = Self::DoubleQoute;
+                        start_index = i + 1;
+                    }
+                    _ => {
+                        arg_type = Self::Raw;
+                        start_index = i;
+                    }
+                },
+                Self::Raw => match ch {
+                    ' ' => {
+                        arg_type = Self::Space;
+                        args.push(text[start_index..=i].to_string());
+                    }
+                    '\'' => {
+                        arg_type = Self::Quote;
+                        start_index = i + 1;
+                    }
+                    '"' => {
+                        arg_type = Self::DoubleQoute;
+                        start_index = i + 1;
+                    }
+                    '\\' => {
+                        arg_type = Self::BackSlash;
+                        args.push(text[start_index..i].to_string());
+                    }
+                    _ => (),
+                },
+                Self::Quote => {
+                    if ch == '\'' {
+                        arg_type = Self::None;
+                        args.push(text[start_index..i].to_string());
+                    }
+                }
+                Self::DoubleQoute => match ch {
+                    '"' => {
+                        arg_type = Self::None;
+                        buf.push(&text[start_index..i]);
+                        args.push(buf.join(""));
+                        buf.clear();
+                    }
+                    '\\' => {
+                        if let Some((_, c)) = text_iter.next() {
+                            static ESC_CHARS: [char; 3] = ['\\', '$', '"'];
+                            if ESC_CHARS.contains(&c) {
+                                buf.push(&text[start_index..i]);
+                                start_index = i + 1;
+                            }
+                        }
+                    }
+                    _ => (),
+                },
+                Self::BackSlash => {
+                    arg_type = Self::None;
+                    args.push(text[i..=i].to_string());
+                }
+            }
+        }
+
+        if arg_type == Self::Raw {
+            args.push(text[start_index..].to_string());
+        }
+
+        args
+    }
 }
 
 impl State {
@@ -103,7 +204,7 @@ impl<'a> Commands<'a> {
 
                 for path_part in path_parts {
                     match path_part {
-                        "." => {} // just skip
+                        "." => {}
                         ".." => {
                             if resolved_path.len() > 1 {
                                 resolved_path.pop();
@@ -139,109 +240,12 @@ impl<'a> Commands<'a> {
         }
     }
 
-    fn parse_args(text: &str) -> Vec<&str> {
+    fn parse_args(text: &str) -> Vec<String> {
         if text.is_empty() {
             return vec![];
         }
 
-        let mut args: Vec<&str> = Vec::new();
-        let mut start_index: usize = 0;
-        let mut arg_type = ArgType::None;
-        let mut buf: Vec<&str> = vec![];
-
-        let mut text_iter = text.chars().enumerate();
-
-        while let Some((i, ch)) = text_iter.next() {
-            match arg_type {
-                ArgType::None => match ch {
-                    ' ' => {
-                        arg_type = ArgType::Space;
-                        args.push(&text[i..=i]);
-                    }
-                    '\'' => {
-                        arg_type = ArgType::Quote;
-                        start_index = i + 1;
-                    }
-                    '"' => {
-                        arg_type = ArgType::DoubleQoute;
-                        start_index = i + 1;
-                    }
-                    '\\' => {
-                        arg_type = ArgType::BackSlash;
-                    }
-                    _ => {
-                        arg_type = ArgType::Raw;
-                        start_index = i;
-                    }
-                },
-                ArgType::Space => match ch {
-                    ' ' => (),
-                    '\'' => {
-                        arg_type = ArgType::Quote;
-                        start_index = i + 1;
-                    }
-                    '"' => {
-                        arg_type = ArgType::DoubleQoute;
-                        start_index = i + 1;
-                    }
-                    _ => {
-                        arg_type = ArgType::Raw;
-                        start_index = i;
-                    }
-                },
-                ArgType::Raw => match ch {
-                    ' ' => {
-                        arg_type = ArgType::Space;
-                        args.push(&text[start_index..=i]);
-                    }
-                    '\'' => {
-                        arg_type = ArgType::Quote;
-                        start_index = i + 1;
-                    }
-                    '"' => {
-                        arg_type = ArgType::DoubleQoute;
-                        start_index = i + 1;
-                    }
-                    '\\' => {
-                        arg_type = ArgType::BackSlash;
-                        args.push(&text[start_index..i]);
-                    }
-                    _ => (),
-                },
-                ArgType::Quote => {
-                    if ch == '\'' {
-                        arg_type = ArgType::None;
-                        args.push(&text[start_index..i]);
-                    }
-                }
-                ArgType::DoubleQoute => match ch {
-                    '"' => {
-                        arg_type = ArgType::None;
-                        args.push(&text[start_index..i]);
-                    }
-                    '\\' => {
-                        if let Some((_, c)) = text_iter.next() {
-                            static ESC_CHARS: [char; 3] = ['\\', '$', '"'];
-                            if ESC_CHARS.contains(&c) {
-                                buf.push(&text[start_index..i]);
-                                start_index = i + 1;
-                            }
-                        }
-                    }
-                    _ => (), // just skip
-                },
-                ArgType::BackSlash => {
-                    arg_type = ArgType::None;
-                    args.push(&text[i..=i]);
-                }
-            }
-        }
-
-        if arg_type == ArgType::Raw {
-            args.push(&text[start_index..]);
-        }
-
-        args
+        ArgType::parse_args(text)
     }
 
     pub fn exec(self, state: &mut State) {
@@ -259,16 +263,8 @@ impl<'a> Commands<'a> {
                 }
             }
             Self::External { command, args } => {
-                let args: Vec<String> = if !args.is_empty() {
-                    args.iter()
-                        .map(|el| el.to_string())
-                        .collect::<Vec<String>>()
-                } else {
-                    vec![]
-                };
-
                 let output = process::Command::new(command)
-                    .args(args)
+                    .args(args.iter().filter(|el| !el.eq(&" ")))
                     .output()
                     .expect("Failed to execute command");
 
