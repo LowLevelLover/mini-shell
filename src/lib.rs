@@ -21,24 +21,12 @@ impl Commands {
     pub fn parse(input_raw: &str, state: &State) -> Self {
         let parsed_args = Self::parse_args(input_raw);
 
-        let (command, args_list) = match input_raw.chars().next() {
-            Some('\'') | Some('"') => (
-                parsed_args[0].as_str().trim_end(),
-                parsed_args.get(1..).unwrap_or(&[]).to_owned(),
-            ),
-            _ => {
-                if let Some(index) = input_raw.find(' ') {
-                    (
-                        &input_raw[..index],
-                        Self::parse_args(input_raw.get(index + 1..).unwrap_or("")),
-                    )
-                } else {
-                    (input_raw, vec![])
-                }
-            }
-        };
+        let (command, args_list) = (
+            parsed_args[0].as_str(),
+            parsed_args.get(1..).unwrap_or(&[]).to_owned(),
+        );
 
-        let resolved_args = args_list.join("");
+        let resolved_args = args_list.join(" ");
 
         match command {
             "exit" => {

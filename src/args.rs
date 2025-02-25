@@ -5,7 +5,7 @@ pub enum ArgType {
     Raw,
     Quote,
     DoubleQoute,
-    BackSlash,
+    RawBackSlash,
 }
 
 impl ArgType {
@@ -21,7 +21,10 @@ impl ArgType {
                 Self::None => match ch {
                     ' ' => {
                         arg_type = Self::Space;
-                        args.push(text[i..=i].to_string());
+                        if !buf.is_empty() {
+                            args.push(buf.join(""));
+                            buf.clear();
+                        }
                     }
                     '\'' => {
                         arg_type = Self::Quote;
@@ -32,7 +35,7 @@ impl ArgType {
                         start_index = i + 1;
                     }
                     '\\' => {
-                        arg_type = Self::BackSlash;
+                        arg_type = Self::RawBackSlash;
                     }
                     _ => {
                         arg_type = Self::Raw;
@@ -49,42 +52,50 @@ impl ArgType {
                         arg_type = Self::DoubleQoute;
                         start_index = i + 1;
                     }
+                    '\\' => {
+                        arg_type = Self::RawBackSlash;
+                    }
                     _ => {
                         arg_type = Self::Raw;
                         start_index = i;
                     }
                 },
-                Self::Raw => match ch {
-                    ' ' => {
-                        arg_type = Self::Space;
-                        args.push(text[start_index..=i].to_string());
+                Self::Raw => {
+                    static DELIM_CHARS: [char; 4] = ['\'', ' ', '"', '\\'];
+                    if DELIM_CHARS.contains(&ch) {
+                        buf.push(&text[start_index..i]);
                     }
-                    '\'' => {
-                        arg_type = Self::Quote;
-                        start_index = i + 1;
+
+                    match ch {
+                        ' ' => {
+                            arg_type = Self::Space;
+                            args.push(buf.join(""));
+                            buf.clear();
+                        }
+                        '\'' => {
+                            arg_type = Self::Quote;
+                            start_index = i + 1;
+                        }
+                        '"' => {
+                            arg_type = Self::DoubleQoute;
+                            start_index = i + 1;
+                        }
+                        '\\' => {
+                            arg_type = Self::RawBackSlash;
+                        }
+                        _ => (),
                     }
-                    '"' => {
-                        arg_type = Self::DoubleQoute;
-                        start_index = i + 1;
-                    }
-                    '\\' => {
-                        arg_type = Self::BackSlash;
-                        args.push(text[start_index..i].to_string());
-                    }
-                    _ => (),
-                },
+                }
                 Self::Quote => {
                     if ch == '\'' {
                         arg_type = Self::None;
-                        args.push(text[start_index..i].to_string());
+                        buf.push(&text[start_index..i]);
                     }
                 }
                 Self::DoubleQoute => match ch {
                     '"' => {
                         arg_type = Self::None;
                         buf.push(&text[start_index..i]);
-                        args.push(buf.join(""));
-                        buf.clear();
                     }
                     '\\' => {
                         if let Some((_, c)) = text_iter.next() {
@@ -97,15 +108,21 @@ impl ArgType {
                     }
                     _ => (),
                 },
-                Self::BackSlash => {
-                    arg_type = Self::None;
-                    args.push(text[i..=i].to_string());
+                Self::RawBackSlash => {
+                    arg_type = Self::Raw;
+                    buf.push(&text[i..=i]);
                 }
             }
         }
 
         if arg_type == Self::Raw {
-            args.push(text[start_index..].to_string());
+            buf.push(&text[start_index..]);
+            args.push(buf.join(""));
+            buf.clear();
+        }
+
+        if !buf.is_empty() {
+            args.push(buf.join(""));
         }
 
         args
