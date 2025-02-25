@@ -1,5 +1,5 @@
 #[derive(PartialEq, Eq)]
-pub enum ArgType {
+enum WordState {
     None,
     Space,
     Raw,
@@ -8,59 +8,61 @@ pub enum ArgType {
     RawBackSlash,
 }
 
-impl ArgType {
-    pub fn parse_args(text: &str) -> Vec<String> {
+pub struct WordParser;
+
+impl WordParser {
+    pub fn split(text: &str) -> Vec<String> {
         let mut args = Vec::<String>::new();
         let mut buf = Vec::<&str>::new();
         let mut start_index = 0usize;
-        let mut arg_type = Self::None;
+        let mut arg_type = WordState::None;
         let mut text_iter = text.chars().enumerate();
 
         while let Some((i, ch)) = text_iter.next() {
             match arg_type {
-                Self::None => match ch {
+                WordState::None => match ch {
                     ' ' => {
-                        arg_type = Self::Space;
+                        arg_type = WordState::Space;
                         if !buf.is_empty() {
                             args.push(buf.join(""));
                             buf.clear();
                         }
                     }
                     '\'' => {
-                        arg_type = Self::Quote;
+                        arg_type = WordState::Quote;
                         start_index = i + 1;
                     }
                     '"' => {
-                        arg_type = Self::DoubleQoute;
+                        arg_type = WordState::DoubleQoute;
                         start_index = i + 1;
                     }
                     '\\' => {
-                        arg_type = Self::RawBackSlash;
+                        arg_type = WordState::RawBackSlash;
                     }
                     _ => {
-                        arg_type = Self::Raw;
+                        arg_type = WordState::Raw;
                         start_index = i;
                     }
                 },
-                Self::Space => match ch {
+                WordState::Space => match ch {
                     ' ' => (),
                     '\'' => {
-                        arg_type = Self::Quote;
+                        arg_type = WordState::Quote;
                         start_index = i + 1;
                     }
                     '"' => {
-                        arg_type = Self::DoubleQoute;
+                        arg_type = WordState::DoubleQoute;
                         start_index = i + 1;
                     }
                     '\\' => {
-                        arg_type = Self::RawBackSlash;
+                        arg_type = WordState::RawBackSlash;
                     }
                     _ => {
-                        arg_type = Self::Raw;
+                        arg_type = WordState::Raw;
                         start_index = i;
                     }
                 },
-                Self::Raw => {
+                WordState::Raw => {
                     static DELIM_CHARS: [char; 4] = ['\'', ' ', '"', '\\'];
                     if DELIM_CHARS.contains(&ch) {
                         buf.push(&text[start_index..i]);
@@ -68,33 +70,33 @@ impl ArgType {
 
                     match ch {
                         ' ' => {
-                            arg_type = Self::Space;
+                            arg_type = WordState::Space;
                             args.push(buf.join(""));
                             buf.clear();
                         }
                         '\'' => {
-                            arg_type = Self::Quote;
+                            arg_type = WordState::Quote;
                             start_index = i + 1;
                         }
                         '"' => {
-                            arg_type = Self::DoubleQoute;
+                            arg_type = WordState::DoubleQoute;
                             start_index = i + 1;
                         }
                         '\\' => {
-                            arg_type = Self::RawBackSlash;
+                            arg_type = WordState::RawBackSlash;
                         }
                         _ => (),
                     }
                 }
-                Self::Quote => {
+                WordState::Quote => {
                     if ch == '\'' {
-                        arg_type = Self::None;
+                        arg_type = WordState::None;
                         buf.push(&text[start_index..i]);
                     }
                 }
-                Self::DoubleQoute => match ch {
+                WordState::DoubleQoute => match ch {
                     '"' => {
-                        arg_type = Self::None;
+                        arg_type = WordState::None;
                         buf.push(&text[start_index..i]);
                     }
                     '\\' => {
@@ -108,20 +110,19 @@ impl ArgType {
                     }
                     _ => (),
                 },
-                Self::RawBackSlash => {
-                    arg_type = Self::Raw;
+                WordState::RawBackSlash => {
+                    arg_type = WordState::Raw;
                     buf.push(&text[i..=i]);
+                    start_index = i + 1;
                 }
             }
         }
 
-        if arg_type == Self::Raw {
+        if arg_type == WordState::Raw {
             buf.push(&text[start_index..]);
             args.push(buf.join(""));
             buf.clear();
-        }
-
-        if !buf.is_empty() {
+        } else if !buf.is_empty() {
             args.push(buf.join(""));
         }
 

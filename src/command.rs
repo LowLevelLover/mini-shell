@@ -1,13 +1,68 @@
-mod args;
+use std::{
+    env, fs,
+    io::{self, Write},
+    process,
+    sync::OnceLock,
+};
 
-use std::{env, fs, process, sync::OnceLock};
-
-use args::ArgType;
+use crate::{operators::Operators, parser::WordParser, state::State};
 
 static CACHE: OnceLock<Vec<fs::DirEntry>> = OnceLock::new();
 static COMMANDS: [&str; 5] = ["exit", "echo", "type", "pwd", "cd"];
 
-pub enum Commands {
+#[derive(Debug)]
+pub(crate) struct Command {
+    cmd: CommandType,
+    output: Option<String>,
+    error: Option<String>,
+}
+
+impl Command {
+    pub fn new(cmd: CommandType) -> Self {
+        Self {
+            cmd,
+            output: None,
+            error: None,
+        }
+    }
+
+    pub fn exec(&mut self, state: &mut State) {
+        self.cmd.exec(state);
+        self.output = Some(state.flush_output_buf());
+        self.error = Some(state.flush_error_buf());
+    }
+
+    pub fn output(&self) -> Option<&String> {
+        match &self.output {
+            Some(o) => Some(&o),
+            None => None,
+        }
+    }
+
+    pub fn error(&self) -> Option<&String> {
+        match &self.error {
+            Some(e) => Some(&e),
+            None => None,
+        }
+    }
+
+    pub fn write_to_stdout(&self) {
+        let mut stdout = io::stdout();
+        if let Some(text) = self.output() {
+            stdout.write(text.as_bytes()).unwrap();
+        }
+    }
+
+    pub fn write_to_stderr(&self) {
+        let mut stderr = io::stderr();
+        if let Some(text) = self.error() {
+            stderr.write(text.as_bytes()).unwrap();
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum CommandType {
     Unknown(String),
     Exit(i32),
     Echo(String),
@@ -17,13 +72,11 @@ pub enum Commands {
     External { command: String, args: Vec<String> },
 }
 
-impl Commands {
-    pub fn parse(input_raw: &str, state: &State) -> Self {
-        let parsed_args = Self::parse_args(input_raw);
-
+impl CommandType {
+    pub(crate) fn parse(parsed_input: Vec<String>, state: &State) -> Self {
         let (command, args_list) = (
-            parsed_args[0].as_str(),
-            parsed_args.get(1..).unwrap_or(&[]).to_owned(),
+            parsed_input[0].as_str(),
+            parsed_input.get(1..).unwrap_or(&[]).to_owned(),
         );
 
         let resolved_args = args_list.join(" ");
@@ -44,7 +97,7 @@ impl Commands {
                     Self::Type(resolved_args)
                 }
             }
-            "pwd" => Self::PWD(String::from(&state.pwd)),
+            "pwd" => Self::PWD(String::from(state.pwd())),
             "cd" => {
                 let path = if resolved_args.is_empty() {
                     env::var("HOME").unwrap()
@@ -63,7 +116,7 @@ impl Commands {
                         }
                     }
                     Some('/') => path.split('/').collect(),
-                    Some(_) => state.pwd.split('/').chain(path.split('/')).collect(),
+                    Some(_) => state.pwd().split('/').chain(path.split('/')).collect(),
                     None => unreachable!(),
                 };
 
@@ -107,46 +160,43 @@ impl Commands {
         }
     }
 
-    fn parse_args(text: &str) -> Vec<String> {
-        if text.is_empty() {
-            return vec![];
-        }
-
-        ArgType::parse_args(text)
-    }
-
-    pub fn exec(self, state: &mut State) {
+    pub fn exec(&self, state: &mut State) {
         match self {
-            Self::Unknown(cmd) => println!("{}: command not found", cmd.trim_end()),
-            Self::Exit(code) => process::exit(code),
-            Self::Echo(text) => println!("{}", text),
+            Self::Unknown(cmd) => {
+                state.write_error(&format!("{}: command not found\n", cmd.trim_end()))
+            }
+            Self::Exit(code) => process::exit(*code),
+            Self::Echo(text) => state.write_output(&format!("{}\n", text)),
             Self::Type(cmd) => {
                 if COMMANDS.contains(&cmd.trim_start()) {
-                    println!("{} is a shell builtin", cmd);
+                    state.write_output(&format!("{} is a shell builtin\n", cmd));
                 } else if let Some(entry) = Self::find_ext_command(&cmd) {
-                    println!("{} is {}", cmd, entry.path().to_str().unwrap());
+                    state.write_output(&format!("{} is {}\n", cmd, entry.path().to_str().unwrap()));
                 } else {
-                    println!("{}: not found", cmd);
+                    state.write_error(&format!("{}: not found\n", cmd));
                 }
             }
             Self::External { command, args } => {
                 let output = process::Command::new(command)
-                    .args(args.iter().filter(|el| !el.eq(&" ")))
+                    .args(args)
                     .output()
                     .expect("Failed to execute command");
 
-                let stdout = String::from_utf8(output.stdout).expect("Failed to read output");
-                print!("{}", stdout);
+                let stdout = String::from_utf8(output.stdout).expect("Failed to read stdout");
+                let stderr = String::from_utf8(output.stderr).expect("Failed to read stderr");
+
+                state.write_output(&format!("{}", stdout));
+                state.write_error(&format!("{}", stderr));
             }
-            Self::PWD(path) => println!("{}", path),
+            Self::PWD(path) => state.write_output(&format!("{}\n", path)),
             Self::CD(path) => match fs::exists(&path) {
                 Ok(true) => {
-                    state.pwd = path;
+                    state.set_pwd(&path);
                 }
                 Ok(false) => {
-                    println!("cd: {}: No such file or directory", path);
+                    state.write_error(&format!("cd: {}: No such file or directory\n", path));
                 }
-                Err(err) => eprintln!("{}", err),
+                Err(err) => state.write_error(&format!("{}\n", err)),
             },
         }
     }
@@ -171,26 +221,5 @@ impl Commands {
         }
 
         commands
-    }
-}
-
-pub struct State {
-    pwd: String,
-}
-
-impl State {
-    pub fn new() -> Self {
-        let pwd = match env::current_dir() {
-            Ok(path) => path.to_string_lossy().to_string(),
-            Err(err) => panic!("Error getting current directory: {}", err),
-        };
-
-        Self { pwd }
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
     }
 }

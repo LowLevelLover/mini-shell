@@ -1,7 +1,14 @@
 #[allow(unused_imports)]
+mod command;
+mod operators;
+mod parser;
+mod state;
+
 use std::io::{self, Write};
 
-use codecrafters_shell::{Commands, State};
+use operators::Operators;
+use parser::WordParser;
+use state::State;
 
 fn main() {
     let mut state = State::new();
@@ -16,8 +23,9 @@ fn main() {
         input = input.trim().to_owned();
 
         if input.chars().count() != 0 {
-            let cmd = Commands::parse(&input, &state);
-            cmd.exec(&mut state);
+            let words = WordParser::split(&input);
+            let mut operators = Operators::create_queue(words, &state);
+            operators.iter_mut().for_each(|op| op.exec(&mut state));
         }
     }
 }
