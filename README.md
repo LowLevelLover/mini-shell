@@ -11,25 +11,14 @@ REPLs, builtin commands, and more.
 **Note**: If you're viewing this repo on GitHub, head over to
 [codecrafters.io](https://codecrafters.io) to try the challenge.
 
-# Passing the first stage
+# Project Structure
 
-The entry point for your `shell` implementation is in `src/main.rs`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
+**Main**: get input from user and run commands.
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+**State**: Keep shell states like `pwm`, `output`, `error` to flush them to _stdout_ or _file_.
 
-Time to move on to the next stage!
+**Parser**: Parse raw input and split it to a vector of shell words. See [Word Splitting](https://www.gnu.org/software/bash/manual/html_node/Word-Splitting.html)
 
-# Stage 2 & beyond
+**Command**: Parse shell words and create Builtin or external command with arguments. Each comand could be execute with `exec()` method.
 
-Note: This section is for stages 2 and beyond.
-
-1. Ensure you have `cargo (1.82)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+**Operator**: Operators has their own structure and could contain one or two commands to run and some words to handle data. Commands which do not have any relation with any operators are `Pure` commands. e.g: `cat somefile otherfile 2> /tmp/fsw/file.txt` -> this redirection operator will redirect Stderr from `cat somefile otherfile` to the `/tmp/fsw/file.txt` file.
