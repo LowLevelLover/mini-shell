@@ -15,6 +15,8 @@ use operators::Operators;
 use parser::WordParser;
 use state::State;
 
+const BELL: char = '\u{0007}';
+
 fn main() {
     let stdin = &io::stdin();
     let mut stdout = stdout().into_raw_mode().expect("Failed to enter raw mode");
@@ -46,7 +48,14 @@ fn main() {
     .unwrap();
 
     loop {
-        for (i, line) in history.iter().enumerate() {
+        let max_rows = termion::terminal_size().unwrap().1 as usize - 1;
+        let start_row = if history.len() >= max_rows {
+            history.len() - max_rows
+        } else {
+            0
+        };
+
+        for (i, line) in history[start_row..].iter().enumerate() {
             let row = (i + 1) as u16;
             write!(
                 stdout,
@@ -76,8 +85,10 @@ fn main() {
             Key::Char('\t') => {
                 if let Some(word) = trie.get_completed_word(&current_input) {
                     current_input = word;
-                    write!(stdout, "{}", &current_input).unwrap();
                     cursor_pos = current_input.chars().count() + 2;
+                } else {
+                    write!(stdout, "{}", BELL).unwrap();
+                    stdout.flush().unwrap();
                 }
             }
             Key::Backspace => {
