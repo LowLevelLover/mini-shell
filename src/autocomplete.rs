@@ -34,6 +34,7 @@ impl TrieNode {
     fn dfs(&self, prefix: String, node: &TrieNode, completions: &mut Vec<String>) {
         if node.is_end_of_word {
             completions.push(prefix.clone());
+            return;
         }
 
         for (ch, child) in &node.children {
@@ -43,7 +44,13 @@ impl TrieNode {
         }
     }
 
-    pub fn get_completed_word(&self, word: &str) -> Option<String> {
-        self.autocomplete(word).first().map(|el| el.to_owned())
+    pub fn get_completed_word(&self, word: &str) -> Option<Vec<String>> {
+        let result = self.autocomplete(word);
+
+        if !result.is_empty() {
+            Some(result)
+        } else {
+            None
+        }
     }
 }

@@ -24,6 +24,8 @@ fn main() {
     let mut state = State::new();
     let mut trie = TrieNode::default();
 
+    let mut multi_tab: Option<Vec<String>> = None;
+
     for word in COMMANDS.iter() {
         trie.insert(word);
     }
@@ -48,14 +50,25 @@ fn main() {
     .unwrap();
 
     loop {
-        let max_rows = termion::terminal_size().unwrap().1 as usize - 1;
-        let start_row = if history.len() >= max_rows {
-            history.len() - max_rows
-        } else {
-            0
-        };
+        let max_cols = termion::terminal_size().unwrap().0 as usize;
+        let max_rows = termion::terminal_size().unwrap().1 - 1;
 
-        for (i, line) in history[start_row..].iter().enumerate() {
+        let mut correct_history: Vec<&str> = vec![];
+
+        for line in history.iter() {
+            let line_rows = (line.len() as f32 / max_cols as f32).ceil() as usize;
+            for i in 0..line_rows {
+                let start = i * max_cols;
+                let end = line.len().min((i + 1) * max_cols);
+
+                correct_history.push(&line[start..end]);
+            }
+        }
+
+        let start_row: usize =
+            0isize.max(correct_history.len() as isize - max_rows as isize) as usize;
+
+        for (i, line) in correct_history[start_row..].iter().enumerate() {
             let row = (i + 1) as u16;
             write!(
                 stdout,
@@ -67,7 +80,7 @@ fn main() {
             .unwrap();
         }
 
-        let input_row = (history.len() + 1) as u16;
+        let input_row = (correct_history.len() + 1) as u16;
         write!(
             stdout,
             "{}{}$ {}",
@@ -81,11 +94,27 @@ fn main() {
 
         let c = stdin.keys().next().unwrap().unwrap();
 
+        if multi_tab.is_some() && c != Key::Char('\t') {
+            multi_tab = None;
+        }
+
         match c {
             Key::Char('\t') => {
-                if let Some(word) = trie.get_completed_word(&current_input) {
-                    current_input = word;
-                    cursor_pos = current_input.chars().count() + 2;
+                if let Some(words) = trie.get_completed_word(&current_input) {
+                    if words.len() == 1 {
+                        current_input = words[0].to_string();
+                        cursor_pos = current_input.chars().count() + 2;
+                    } else {
+                        match &multi_tab {
+                            Some(w) => {
+                                history.push("$ ".to_string() + &current_input);
+                                history.push(w.join("  "));
+                            }
+                            None => {
+                                multi_tab = Some(words.to_vec());
+                            }
+                        }
+                    }
                 } else {
                     write!(stdout, "{}", BELL).unwrap();
                     stdout.flush().unwrap();
