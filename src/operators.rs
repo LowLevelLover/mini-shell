@@ -25,7 +25,7 @@ enum RedirectType {
 
 impl RedirectType {
     fn from_str(op: &str) -> Result<Self, anyhow::Error> {
-        let digits: String = op.chars().take_while(|c| c.is_digit(10)).collect();
+        let digits: String = op.chars().take_while(|c| c.is_ascii_digit()).collect();
         let mut chars = op.get(digits.len()..).unwrap_or(op).chars();
 
         let first_char = chars.next();
@@ -66,7 +66,7 @@ impl RedirectType {
 }
 
 #[derive(Debug)]
-pub(crate) struct Redirect {
+pub struct Redirect {
     command: Command,
     r_type: RedirectType,
     file: File,
@@ -105,15 +105,19 @@ impl Redirect {
                 match output_type {
                     OutputType::StdOut => {
                         self.file
-                            .write(self.command.output().unwrap_or(&String::new()).as_bytes())
+                            .write_all(self.command.output().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        self.command.write_to_stderr();
+                        if let Some(output) = self.command.output() {
+                            state.write_stdout(output);
+                        }
                     }
                     OutputType::StdErr => {
                         self.file
-                            .write(self.command.error().unwrap_or(&String::new()).as_bytes())
+                            .write_all(self.command.error().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        self.command.write_to_stdout();
+                        if let Some(error) = self.command.error() {
+                            state.write_stdout(error);
+                        }
                     }
                 }
             }
@@ -122,15 +126,19 @@ impl Redirect {
                 match output_type {
                     OutputType::StdOut => {
                         self.file
-                            .write(self.command.output().unwrap_or(&String::new()).as_bytes())
+                            .write_all(self.command.output().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        self.command.write_to_stderr();
+                        if let Some(output) = self.command.output() {
+                            state.write_stdout(output);
+                        }
                     }
                     OutputType::StdErr => {
                         self.file
-                            .write(self.command.error().unwrap_or(&String::new()).as_bytes())
+                            .write_all(self.command.error().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        self.command.write_to_stdout();
+                        if let Some(error) = self.command.error() {
+                            state.write_stdout(error);
+                        }
                     }
                 }
             }
@@ -182,12 +190,17 @@ impl Operators {
         ops
     }
 
-    pub(crate) fn exec(&mut self, state: &mut State) {
+    pub fn exec(&mut self, state: &mut State) {
         match self {
             Self::Pure(cmd) => {
                 cmd.exec(state);
-                cmd.write_to_stdout();
-                cmd.write_to_stderr();
+                if let Some(output) = cmd.output() {
+                    state.write_stdout(output);
+                }
+
+                if let Some(error) = cmd.error() {
+                    state.write_stderr(error);
+                }
             }
             Self::Redirect(cmd) => cmd.exec(state),
         }

@@ -2,8 +2,8 @@ use std::env;
 
 pub struct State {
     pwd: String,
-    output_buf: String,
-    error_buf: String,
+    stdout: String,
+    stderr: String,
 }
 
 impl State {
@@ -15,8 +15,8 @@ impl State {
 
         Self {
             pwd,
-            output_buf: String::new(),
-            error_buf: String::new(),
+            stdout: String::new(),
+            stderr: String::new(),
         }
     }
 
@@ -28,26 +28,26 @@ impl State {
         self.pwd = pwd.to_string();
     }
 
-    pub fn flush_output_buf(&mut self) -> String {
-        let output = self.output_buf.clone();
-        self.output_buf.clear();
+    pub fn flush_stdout(&mut self) -> String {
+        let output = self.stdout.clone();
+        self.stdout.clear();
 
         output
     }
 
-    pub fn write_output(&mut self, text: &str) {
-        self.output_buf.push_str(text);
+    pub fn write_stdout(&mut self, text: &str) {
+        self.stdout.push_str(text);
     }
 
-    pub fn flush_error_buf(&mut self) -> String {
-        let error = self.error_buf.clone();
-        self.error_buf.clear();
+    pub fn flush_stderr(&mut self) -> String {
+        let error = self.stderr.clone();
+        self.stderr.clear();
 
         error
     }
 
-    pub fn write_error(&mut self, text: &str) {
-        self.error_buf.push_str(text);
+    pub fn write_stderr(&mut self, text: &str) {
+        self.stderr.push_str(text);
     }
 }
 
