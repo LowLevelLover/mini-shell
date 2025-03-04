@@ -107,16 +107,16 @@ impl Redirect {
                         self.file
                             .write_all(self.command.output().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        if let Some(output) = self.command.output() {
-                            state.write_stdout(output);
+                        if let Some(error) = self.command.error() {
+                            state.write_stderr(error);
                         }
                     }
                     OutputType::StdErr => {
                         self.file
                             .write_all(self.command.error().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        if let Some(error) = self.command.error() {
-                            state.write_stdout(error);
+                        if let Some(output) = self.command.output() {
+                            state.write_stdout(output);
                         }
                     }
                 }
@@ -128,16 +128,16 @@ impl Redirect {
                         self.file
                             .write_all(self.command.output().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        if let Some(output) = self.command.output() {
-                            state.write_stdout(output);
+                        if let Some(error) = self.command.error() {
+                            state.write_stderr(error);
                         }
                     }
                     OutputType::StdErr => {
                         self.file
                             .write_all(self.command.error().unwrap_or(&String::new()).as_bytes())
                             .unwrap();
-                        if let Some(error) = self.command.error() {
-                            state.write_stdout(error);
+                        if let Some(output) = self.command.output() {
+                            state.write_stdout(output);
                         }
                     }
                 }
