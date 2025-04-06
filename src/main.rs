@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 mod autocomplete;
 mod command;
 mod operators;
@@ -18,6 +17,8 @@ use state::State;
 const BELL: char = '\u{0007}';
 
 fn main() {
+    println!("Shell is starting..."); // the following line is necessary to initialize stdout properly in docker container
+
     let stdin = &io::stdin();
     let mut stdout = stdout().into_raw_mode().expect("Failed to enter raw mode");
 
