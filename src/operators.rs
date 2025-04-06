@@ -1,9 +1,8 @@
 use std::{
+    error::Error,
     fs::{File, OpenOptions},
     io::Write,
 };
-
-use anyhow::anyhow;
 
 use crate::{
     command::{Command, CommandType},
@@ -24,7 +23,7 @@ enum RedirectType {
 }
 
 impl RedirectType {
-    fn from_str(op: &str) -> Result<Self, anyhow::Error> {
+    fn from_str(op: &str) -> Result<Self, Box<dyn Error>> {
         let digits: String = op.chars().take_while(|c| c.is_ascii_digit()).collect();
         let mut chars = op.get(digits.len()..).unwrap_or(op).chars();
 
@@ -33,11 +32,11 @@ impl RedirectType {
         match first_char {
             Some(c) => {
                 if !['<', '>'].contains(&c) {
-                    return Err(anyhow!("Failed to read operator"));
+                    return Err("Failed to read operator".into());
                 }
             }
             None => {
-                return Err(anyhow!("Failed to read operator"));
+                return Err("Failed to read operator".into());
             }
         }
 
@@ -59,7 +58,7 @@ impl RedirectType {
                     Ok(Self::Output(output_type))
                 }
             }
-            Some(_) => Err(anyhow!("Failed to read operator")),
+            Some(_) => Err("Failed to read operator".into()),
             None => unreachable!(),
         }
     }
